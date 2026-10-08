@@ -121,6 +121,10 @@ def cmd_build(args):
                  "The data has been converted and compressed for the app.</p>"
                  "<p>Feed valid %s – %s. <a href='v1/manifest.json'>manifest</a></p>" % (
                      manifest["feedStart"], manifest["feedEnd"]))
+    # 網站頁面（首頁、隱私權政策、支援頁）一起發布；site/index.html 會取代上面的簡易首頁
+    site = os.path.join(os.path.dirname(HERE), "site")
+    if os.path.isdir(site):
+        shutil.copytree(site, args.out, dirs_exist_ok=True)
     shutil.rmtree(work)
     print(json.dumps(manifest, indent=1))
     return 0
