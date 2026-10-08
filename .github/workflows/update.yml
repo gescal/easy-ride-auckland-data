@@ -1,0 +1,47 @@
+name: Update timetable
+
+# 每天紐西蘭時間清晨檢查 AT 有沒有發布新的 GTFS；有更新才重新產生，發布到 gh-pages 分支（GitHub Pages）。
+on:
+  schedule:
+    - cron: "17 16 * * *"      # UTC 16:17 ＝ 紐西蘭 04:17／05:17
+  workflow_dispatch:
+    inputs:
+      force:
+        description: "就算 AT 沒更新也重新發布"
+        type: boolean
+        default: false
+
+permissions:
+  contents: write
+
+concurrency:
+  group: publish
+  cancel-in-progress: false
+
+jobs:
+  update:
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+
+      - name: Download AT GTFS
+        run: curl -fsSL --retry 3 -o gtfs.zip https://gtfs.at.govt.nz/gtfs.zip
+
+      - name: Has the feed changed?
+        id: check
+        run: python3 tools/publish_data.py check --gtfs gtfs.zip --live "https://${{ github.repository_owner }}.github.io/${{ github.event.repository.name }}/v1/manifest.json"
+
+      - name: Build data files
+        if: steps.check.outputs.changed == 'true' || inputs.force
+        run: python3 tools/publish_data.py build --gtfs gtfs.zip --legacy source/auckland-map.json --out dist
+
+      # 每次只保留最新一版（force_orphan），repo 不會越來越大
+      - name: Publish to gh-pages
+        if: steps.check.outputs.changed == 'true' || inputs.force
+        uses: peaceiris/actions-gh-pages@v4
+        with:
+          github_token: ${{ secrets.GITHUB_TOKEN }}
+          publish_dir: dist
+          publish_branch: gh-pages
+          force_orphan: true
+          commit_message: "Timetable data ${{ github.run_id }}"
