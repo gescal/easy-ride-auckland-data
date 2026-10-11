@@ -456,6 +456,7 @@ def build_timetable(gtfs_path, out_path):
     - 時間是「服務日 0 點起算的分鐘數」，可能超過 1440（GTFS 的跨午夜班次）。
     - 同一路線、方向、服務規則的時間合併成一列，用差值編碼的逗號字串存，App 查單站時才解開。
     - 不收班次的最後一站（只下車）與不能上車的站（pickup_type=1）。
+    - 這些「只下車」的站另外存在 arrivals 表（班次、站、到站分鐘），App 規劃搭車路線時才知道終點站幾點到。
     """
     import sqlite3
     zf = zipfile.ZipFile(gtfs_path)
@@ -500,6 +501,7 @@ def build_timetable(gtfs_path, out_path):
     patterns, pattern_ids = [], {}
     groups = defaultdict(list)  # (stop, pattern, service) -> [(minutes, trip index)]
     trip_list, trip_index = [], {}
+    arrivals = []   # (trip index, stop, minutes)：只下車的站（終點站、pickup_type=1）
 
     def flush(trip_id, rows):
         info = trips.get(trip_id)
@@ -511,8 +513,13 @@ def build_timetable(gtfs_path, out_path):
             trip_index[trip_id] = len(trip_list)
             trip_list.append(trip_id)
         ti = trip_index[trip_id]
-        for r in rows[:-1]:                      # 最後一站只下車
-            if (r.get("pickup_type") or "0") == "1":
+        for idx, r in enumerate(rows):
+            last = idx == len(rows) - 1          # 最後一站只下車
+            if last or (r.get("pickup_type") or "0") == "1":
+                if (r.get("drop_off_type") or "0") != "1":
+                    m = _minutes(r.get("arrival_time") or r.get("departure_time"))
+                    if m is not None:
+                        arrivals.append((ti, stop_key(r["stop_id"]), m))
                 continue
             m = _minutes(r.get("departure_time") or r.get("arrival_time"))
             if m is None:
@@ -545,6 +552,7 @@ def build_timetable(gtfs_path, out_path):
         CREATE TABLE departures(stop TEXT NOT NULL, pattern INTEGER NOT NULL, service INTEGER NOT NULL,
                                 times TEXT NOT NULL, trips TEXT NOT NULL);
         CREATE TABLE trips(id INTEGER PRIMARY KEY, trip_id TEXT NOT NULL);
+        CREATE TABLE arrivals(trip INTEGER NOT NULL, stop TEXT NOT NULL, minute INTEGER NOT NULL);
     """)
     info = next(read_csv(zf, "feed_info.txt") or iter(()), None) or {}
     db.executemany("INSERT INTO meta VALUES (?, ?)", [
@@ -557,6 +565,7 @@ def build_timetable(gtfs_path, out_path):
     db.executemany("INSERT INTO patterns VALUES (?, ?, ?, ?)",
                    [(i, p[0], p[1], p[2]) for i, p in enumerate(patterns)])
     db.executemany("INSERT INTO trips VALUES (?, ?)", list(enumerate(trip_list)))
+    db.executemany("INSERT INTO arrivals VALUES (?, ?, ?)", sorted(arrivals))
     rows = []
     for (stop, pat, svc), items in groups.items():
         items.sort()
