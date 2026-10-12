@@ -450,6 +450,37 @@ def _minutes(hms):
         return None
 
 
+def _douglas_peucker(pts, tol_m):
+    """簡化折線：拿掉離前後連線不到 tol_m 公尺的點（保留頭尾）。"""
+    if len(pts) < 3:
+        return pts
+    lat0 = math.radians(pts[0][0])
+    kx, ky = 111320 * math.cos(lat0), 110540
+    xy = [(b * kx, a * ky) for a, b in pts]
+    keep = [False] * len(pts)
+    keep[0] = keep[-1] = True
+    stack = [(0, len(pts) - 1)]
+    while stack:
+        i, j = stack.pop()
+        (x1, y1), (x2, y2) = xy[i], xy[j]
+        dx, dy = x2 - x1, y2 - y1
+        L2 = dx * dx + dy * dy
+        best, bi = -1.0, -1
+        for k in range(i + 1, j):
+            px, py = xy[k]
+            if L2 == 0:
+                d = math.hypot(px - x1, py - y1)
+            else:
+                t = max(0.0, min(1.0, ((px - x1) * dx + (py - y1) * dy) / L2))
+                d = math.hypot(px - (x1 + t * dx), py - (y1 + t * dy))
+            if d > best:
+                best, bi = d, k
+        if best > tol_m:
+            keep[bi] = True
+            stack += [(i, bi), (bi, j)]
+    return [p for p, k in zip(pts, keep) if k]
+
+
 def build_timetable(gtfs_path, out_path):
     """產生 timetable.sqlite：每個站（與 transit.json 相同的站 id）每條路線、每個方向的表定發車時間。
 
@@ -493,10 +524,13 @@ def build_timetable(gtfs_path, out_path):
                      for d in read_csv(zf, "calendar_dates.txt")]
 
     trips = {}
+    trip_shape_id = {}
     for tr in read_csv(zf, "trips.txt"):
         if tr.get("route_id") in routes:
             trips[tr["trip_id"]] = (routes[tr["route_id"]], service_index(tr["service_id"]),
                                     (tr.get("trip_headsign") or "").strip())
+            if tr.get("shape_id"):
+                trip_shape_id[tr["trip_id"]] = tr["shape_id"]
 
     patterns, pattern_ids = [], {}
     groups = defaultdict(list)  # (stop, pattern, service) -> [(minutes, trip index)]
@@ -553,6 +587,8 @@ def build_timetable(gtfs_path, out_path):
                                 times TEXT NOT NULL, trips TEXT NOT NULL);
         CREATE TABLE trips(id INTEGER PRIMARY KEY, trip_id TEXT NOT NULL);
         CREATE TABLE arrivals(trip INTEGER NOT NULL, stop TEXT NOT NULL, minute INTEGER NOT NULL);
+        CREATE TABLE shapes(id INTEGER PRIMARY KEY, points TEXT NOT NULL);
+        CREATE TABLE trip_shapes(trip INTEGER PRIMARY KEY, shape INTEGER NOT NULL);
     """)
     info = next(read_csv(zf, "feed_info.txt") or iter(()), None) or {}
     db.executemany("INSERT INTO meta VALUES (?, ?)", [
@@ -566,6 +602,31 @@ def build_timetable(gtfs_path, out_path):
                    [(i, p[0], p[1], p[2]) for i, p in enumerate(patterns)])
     db.executemany("INSERT INTO trips VALUES (?, ?)", list(enumerate(trip_list)))
     db.executemany("INSERT INTO arrivals VALUES (?, ?, ?)", sorted(arrivals))
+
+    # 路線形狀（GTFS shapes）：App 畫搭車路線時沿著真正的鐵軌／道路，不是站跟站直線相連。
+    # 點用 Douglas-Peucker 簡化（約 5 公尺），存成「緯度,經度」×1e5 的差值整數字串。
+    wanted = {trip_shape_id[t] for t in trip_list if t in trip_shape_id}
+    raw = defaultdict(list)
+    for row in read_csv(zf, "shapes.txt"):
+        sid = row.get("shape_id")
+        if sid in wanted:
+            raw[sid].append((int(row.get("shape_pt_sequence") or 0),
+                             float(row["shape_pt_lat"]), float(row["shape_pt_lon"])))
+    shape_index, shape_rows = {}, []
+    for sid in sorted(raw):
+        pts = [(a, b) for _, a, b in sorted(raw[sid])]
+        pts = _douglas_peucker(pts, 5.0)
+        ints = [(round(a * 1e5), round(b * 1e5)) for a, b in pts]
+        flat, pa, pb = [], 0, 0
+        for a, b in ints:
+            flat += [a - pa, b - pb]
+            pa, pb = a, b
+        shape_index[sid] = len(shape_rows)
+        shape_rows.append((len(shape_rows), ",".join(map(str, flat))))
+    db.executemany("INSERT INTO shapes VALUES (?, ?)", shape_rows)
+    db.executemany("INSERT INTO trip_shapes VALUES (?, ?)",
+                   [(i, shape_index[trip_shape_id[t]]) for i, t in enumerate(trip_list)
+                    if trip_shape_id.get(t) in shape_index])
     rows = []
     for (stop, pat, svc), items in groups.items():
         items.sort()
