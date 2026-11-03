@@ -1,0 +1,25 @@
+:root{--bg:#F6F7F5;--card:#FFFFFF;--ink:#1F2A33;--muted:#5D6B78;--line:#E2E6EA;--accent:#2F95D6;--green:#5E9E2A;--red:#E2312B}
+@media (prefers-color-scheme:dark){:root{--bg:#14191E;--card:#1C232A;--ink:#E8EDF1;--muted:#9AA8B5;--line:#2C353E;--accent:#5DB3EA}}
+*{box-sizing:border-box}
+body{margin:0;background:var(--bg);color:var(--ink);font:16px/1.7 -apple-system,BlinkMacSystemFont,"Segoe UI","PingFang TC","PingFang SC","Noto Sans TC","Noto Sans SC",sans-serif;-webkit-text-size-adjust:100%}
+.wrap{max-width:720px;margin:0 auto;padding:24px 16px 64px}
+header{display:flex;align-items:center;gap:14px;margin-bottom:20px}
+header img{width:56px;height:56px;border-radius:13px;flex:none}
+header h1{font-size:20px;line-height:1.3;margin:0}
+header p{margin:2px 0 0;color:var(--muted);font-size:14px}
+.langs{display:flex;gap:6px;flex-wrap:wrap;margin:0 0 20px}
+.langs button{font:inherit;font-size:14px;padding:6px 12px;border-radius:999px;border:1px solid var(--line);background:var(--card);color:var(--ink);cursor:pointer}
+.langs button[aria-pressed=true]{background:var(--ink);color:var(--bg);border-color:var(--ink)}
+.card{background:var(--card);border:1px solid var(--line);border-radius:16px;padding:20px 20px 8px;margin-bottom:16px}
+h2{font-size:18px;margin:0 0 8px}
+h3{font-size:16px;margin:18px 0 4px}
+p,li{color:var(--ink)}
+.muted{color:var(--muted);font-size:14px}
+ul{padding-left:20px}
+a{color:var(--accent)}
+.contact{font-weight:600;word-break:break-all}
+nav.links{display:flex;gap:16px;flex-wrap:wrap;margin-top:24px;font-size:14px}
+[data-lang]{display:none}
+html[data-show=en] [data-lang=en],html[data-show=hant] [data-lang=hant],html[data-show=hans] [data-lang=hans]{display:block}
+.nb{white-space:nowrap}
+header p{line-height:1.5}

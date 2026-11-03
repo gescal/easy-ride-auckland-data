@@ -1,0 +1,24 @@
+{
+ "schema": 1,
+ "build": 1793742475,
+ "feedStart": 20261027,
+ "feedEnd": 20270207,
+ "feedVersion": "VDV_Merge_119_2_C_4_338.08584079057965103722149836510CU53",
+ "generated": "2026-11-03",
+ "minAppBuild": 1,
+ "source": "Auckland Transport GTFS (https://at.govt.nz), CC BY 4.0; converted for Easy Ride Auckland",
+ "files": {
+  "timetable": {
+   "path": "timetable.sqlite.deflate",
+   "sha256": "774f2473432e9a76ef2553487b935b594cd663c76fa41b55c4b435cfd93d0c26",
+   "bytes": 13938688,
+   "deflatedBytes": 3129069
+  },
+  "transit": {
+   "path": "transit.json.deflate",
+   "sha256": "e6b74b6e10f5680ed8804589fd08347a74bc234a2e904bf85b56967ad0a794b5",
+   "bytes": 984203,
+   "deflatedBytes": 182963
+  }
+ }
+}
